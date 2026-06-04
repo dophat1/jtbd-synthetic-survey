@@ -133,6 +133,14 @@ Rules for coherence:
 - stress_level is 0-100 integer
 - satisfaction is 0-100 integer
 
+Field value constraints:
+- current_mood: "happy", "excited", "neutral", "frustrated", or "anxious"
+- teammate_relationship: "strong", "average", or "isolated"
+- coach_relationship: "good", "neutral", or "bad"
+- bullying_experience: "none", "mild", or "frequent"
+- sports_expectation: "performance_focused", "balanced", or "fun"
+- position: "forward", "midfielder", "defender", "goalkeeper", or "mixed"
+
 Respond ONLY with a valid JSON array — no markdown, no explanation."""
 
 
@@ -163,16 +171,16 @@ Each persona must follow this exact schema:
     "skill_level": "STR (high/medium/low)"
   }},
   "social_context": {{
-    "coach_relationship": "STR (good/neutral/poor)",
-    "teammate_relationship": "STR (integrated/neutral/isolated)",
+    "coach_relationship": "STR (good/neutral/bad)",
+    "teammate_relationship": "STR (strong/average/isolated)",
     "peer_influence": "STR (high/medium/low)",
-    "bullying_experience": "STR (none/occasional/frequent)",
+    "bullying_experience": "STR (none/mild/frequent)",
     "friendship_importance": "STR (high/medium/low)"
   }},
   "family_context": {{
     "parent_support": "STR (high/medium/low)",
     "parent_pressure": "STR (high/medium/low)",
-    "sports_expectation": "STR (performance_focused/balanced/recreational)"
+    "sports_expectation": "STR (performance_focused/balanced/fun)"
   }},
   "psychology_big_five": {{
     "openness": INT,
@@ -183,7 +191,7 @@ Each persona must follow this exact schema:
   }},
   "emotional_state": {{
     "recent_results": ["win/draw/loss", ...5 items],
-    "current_mood": "STR (positive/neutral/negative)",
+    "current_mood": "STR (happy/excited/neutral/frustrated/anxious)",
     "recent_event": "STR (brief description or none)",
     "stress_level": INT
   }},
@@ -268,13 +276,15 @@ Simulate how a specific child answers a satisfaction/importance survey based on 
 Behavioral rules:
 - Introverted children (low extraversion) rate social/clubhouse questions lower in importance
 - Neurotic children (high neuroticism) rate coach-related satisfaction lower when under stress
-- Children with bullying experience rate teammate satisfaction significantly lower
+- Children with bullying experience (mild or frequent) rate teammate satisfaction significantly lower
 - Highly agreeable children give slightly higher satisfaction but NOT uniformly
 - Performance-focused family expectation raises importance of competition questions
 - Low parent support + high stress = lower satisfaction across the board
 - Recent losses reduce competition satisfaction but may raise improvement importance
 - Conscientiousness drives training-related importance scores up
 - Openness drives variety/tricks/new-experiences importance up
+- Mood "excited"/"happy" → slightly elevated satisfaction; "frustrated"/"anxious" → reduced satisfaction
+- Coach relationship "bad" (not just "poor") → strongly reduced coach-section satisfaction
 
 Do NOT average everything out. Be psychologically differentiated.
 Always respond with valid JSON only — no markdown."""
@@ -524,13 +534,13 @@ with tab_gen:
         for i, p in enumerate(st.session_state.personas):
             bf = p["psychology_big_five"]
             mood_tag = (
-                "tag-green" if p["emotional_state"]["current_mood"] == "positive" else
-                "tag-red"   if p["emotional_state"]["current_mood"] == "negative" else
+                "tag-green" if p["emotional_state"]["current_mood"] in ("positive", "happy", "excited") else
+                "tag-red"   if p["emotional_state"]["current_mood"] in ("negative", "frustrated", "anxious") else
                 "tag-gray"
             )
             bully_tag = (
                 "tag-red"   if p["social_context"]["bullying_experience"] == "frequent" else
-                "tag-amber" if p["social_context"]["bullying_experience"] == "occasional" else
+                "tag-amber" if p["social_context"]["bullying_experience"] in ("occasional", "mild") else
                 "tag-green"
             )
             with st.expander(
