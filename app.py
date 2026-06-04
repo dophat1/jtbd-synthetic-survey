@@ -846,7 +846,7 @@ with tab_res:
         with st.expander("Raw data table"):
             display_cols = ["persona_id", "run_index", "age_group", "position",
                             "coach_relationship", "bullying", "current_mood",
-                            "overall_satisfaction"] + sat_cols[:9] + imp_cols[:9]
+                            "overall_satisfaction"] + sat_cols[:67] + imp_cols[:67]
             st.dataframe(fdf[display_cols], use_container_width=True, hide_index=True)
 
         # ── Export ────────────────────────────────────────────────────────────

@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+#openai api key
+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
