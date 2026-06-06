@@ -216,3 +216,34 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Virtual environment
+jtbd_venv/
+
+# Environment variables & secrets
+.env
+secrets.txt
+
+# Generated output files
+# results.csv
+# results_all.csv
+# opportunity_scores.csv
+# *.csv
+
+# Data folder (if it contains sensitive/generated data)
+data/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+merge_batches.py
+
+*.png
+
+*.csv

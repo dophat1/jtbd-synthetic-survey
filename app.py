@@ -522,7 +522,6 @@ with tab_gen:
             try:
                 loaded = json.load(uploaded)
                 if isinstance(loaded, list):
-                    # avoid duplicates by persona_id
                     existing_ids = {p["persona_id"] for p in st.session_state.personas}
                     added = [p for p in loaded if p["persona_id"] not in existing_ids]
                     st.session_state.personas.extend(added)
@@ -531,48 +530,71 @@ with tab_gen:
             except Exception as e:
                 st.error(f"Could not parse file: {e}")
 
-        for i, p in enumerate(st.session_state.personas):
-            bf = p["psychology_big_five"]
-            mood_tag = (
-                "tag-green" if p["emotional_state"]["current_mood"] in ("positive", "happy", "excited") else
-                "tag-red"   if p["emotional_state"]["current_mood"] in ("negative", "frustrated", "anxious") else
-                "tag-gray"
-            )
-            bully_tag = (
-                "tag-red"   if p["social_context"]["bullying_experience"] == "frequent" else
-                "tag-amber" if p["social_context"]["bullying_experience"] in ("occasional", "mild") else
-                "tag-green"
-            )
-            with st.expander(
-                f"**{p['persona_id']}** — {p['identity']['age']}y · {p['team_context']['age_group_team']} · "
-                f"{p['team_context']['position']} · satisfaction {p['satisfaction']}/100"
-            ):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.markdown("**Identity & Team**")
-                    st.write(f"Age: {p['identity']['age']} | Country: {p['identity']['country']}")
-                    st.write(f"Position: {p['team_context']['position']}")
-                    st.write(f"Skill: {p['team_context']['skill_level']} | Time: {p['team_context']['playing_time']}")
-                with c2:
-                    st.markdown("**Social & Family**")
-                    st.write(f"Coach: {p['social_context']['coach_relationship']}")
-                    st.write(f"Teammates: {p['social_context']['teammate_relationship']}")
-                    st.write(f"Bullying: {p['social_context']['bullying_experience']}")
-                    st.write(f"Parent support: {p['family_context']['parent_support']}")
-                    st.write(f"Pressure: {p['family_context']['parent_pressure']}")
-                with c3:
-                    st.markdown("**Big Five**")
-                    bf_labels = ["O", "C", "E", "A", "N"]
-                    bf_vals   = [bf["openness"], bf["conscientiousness"], bf["extraversion"],
-                                 bf["agreeableness"], bf["neuroticism"]]
-                    for lbl, val in zip(bf_labels, bf_vals):
-                        st.progress(val / 100, text=f"{lbl}: {val}")
+        # ── Summary table (all personas, no element-count limit) ──────────────
+        import pandas as pd
 
-                col_del, _ = st.columns([1, 5])
-                with col_del:
-                    if st.button("Remove", key=f"del_{i}"):
-                        st.session_state.personas.pop(i)
-                        st.rerun()
+        summary_rows = []
+        for p in st.session_state.personas:
+            summary_rows.append({
+                "ID":           p["persona_id"],
+                "Age":          p["identity"]["age"],
+                "Group":        p["team_context"]["age_group_team"],
+                "Country":      p["identity"]["country"],
+                "Position":     p["team_context"]["position"],
+                "Skill":        p["team_context"]["skill_level"],
+                "Playing time": p["team_context"]["playing_time"],
+                "Coach":        p["social_context"]["coach_relationship"],
+                "Teammates":    p["social_context"]["teammate_relationship"],
+                "Bullying":     p["social_context"]["bullying_experience"],
+                "Mood":         p["emotional_state"]["current_mood"],
+                "Stress":       p["emotional_state"]["stress_level"],
+                "Satisfaction": p["satisfaction"],
+            })
+        summary_df = pd.DataFrame(summary_rows)
+
+        st.dataframe(
+            summary_df,
+            use_container_width=True,
+            hide_index=True,
+            height=340,
+        )
+
+        # ── Detail view for a single selected persona ─────────────────────────
+        st.markdown("#### Inspect persona")
+        persona_ids = [p["persona_id"] for p in st.session_state.personas]
+        selected_id = st.selectbox("Select persona ID", persona_ids, label_visibility="collapsed")
+
+        sel_index = next((i for i, p in enumerate(st.session_state.personas) if p["persona_id"] == selected_id), None)
+        if sel_index is not None:
+            p  = st.session_state.personas[sel_index]
+            bf = p["psychology_big_five"]
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown("**Identity & Team**")
+                st.write(f"Age: {p['identity']['age']} | Country: {p['identity']['country']}")
+                st.write(f"Position: {p['team_context']['position']}")
+                st.write(f"Skill: {p['team_context']['skill_level']} | Playing time: {p['team_context']['playing_time']}")
+                st.write(f"Recent event: {p['emotional_state'].get('recent_event', '—')}")
+            with c2:
+                st.markdown("**Social & Family**")
+                st.write(f"Coach: {p['social_context']['coach_relationship']}")
+                st.write(f"Teammates: {p['social_context']['teammate_relationship']}")
+                st.write(f"Bullying: {p['social_context']['bullying_experience']}")
+                st.write(f"Parent support: {p['family_context']['parent_support']}")
+                st.write(f"Pressure: {p['family_context']['parent_pressure']}")
+                st.write(f"Sports expectation: {p['family_context']['sports_expectation']}")
+            with c3:
+                st.markdown("**Big Five**")
+                for lbl, key in [("O", "openness"), ("C", "conscientiousness"), ("E", "extraversion"),
+                                  ("A", "agreeableness"), ("N", "neuroticism")]:
+                    st.progress(bf[key] / 100, text=f"{lbl}: {bf[key]}")
+
+            col_del, _ = st.columns([1, 5])
+            with col_del:
+                if st.button("🗑️ Remove this persona", key="del_selected"):
+                    st.session_state.personas.pop(sel_index)
+                    st.rerun()
     else:
         st.info("No personas yet. Generate some above or upload a personas.json file.")
         uploaded = st.file_uploader("Upload personas.json", type="json")
