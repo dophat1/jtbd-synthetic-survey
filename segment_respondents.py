@@ -11,30 +11,19 @@ def segment_respondents(input_file, output_file=None, force_k=None):
     df = pd.read_csv(input_file)
     print(f"Loaded {len(df)} respondents.")
 
-    # Detect question numbers
-    q_nums = sorted(set(
-        int(c.split('_')[0][1:])
-        for c in df.columns if c.startswith('Q') and '_' in c
-    ))
-    print(f"Found {len(q_nums)} outcomes (Q{q_nums[0]} to Q{q_nums[-1]}).")
+    # Detect satisfaction columns
+    sat_cols = sorted(
+        [c for c in df.columns if c.endswith('_sat') and c.startswith('Q')],
+        key=lambda x: int(x.split('_')[0][1:])
+    )
+    print(f"Found {len(sat_cols)} satisfaction columns.")
+    print("Clustering on satisfaction scores (unmet needs approach — Ulwick ODI).")
 
-    # ── Compute per-respondent opportunity score for each outcome ────
-    # Ulwick: Opportunity = Importance + max(Importance - Satisfaction, 0)
-    opp_cols = []
-    for i in q_nums:
-        imp = df[f'Q{i}_imp']
-        sat = df[f'Q{i}_sat']
-        col = f'Q{i}_opp'
-        df[col] = imp + (imp - sat).clip(lower=0)
-        opp_cols.append(col)
-
-    print(f"Computed {len(opp_cols)} per-respondent opportunity scores.")
-
-    # ── Cluster on opportunity scores ────────────────────────────────
-    X = df[opp_cols].fillna(df[opp_cols].mean())
+    X = df[sat_cols].fillna(df[sat_cols].mean())
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
+    # Find best k
     print("\nFinding optimal number of segments (k=2 to 8)...")
     print(f"{'k':>4} {'silhouette':>12} {'inertia':>12}")
     print("-" * 32)
@@ -63,7 +52,7 @@ def segment_respondents(input_file, output_file=None, force_k=None):
     km_final = KMeans(n_clusters=best_k, random_state=42, n_init=10)
     df['segment'] = km_final.fit_predict(X_scaled) + 1
 
-    # ── Profile each segment ─────────────────────────────────────────
+    # Profile each segmenta
     print("\nSegment profiles:")
     meta_cols = [c for c in ['age', 'skill_level', 'position', 'stress_level',
                               'overall_satisfaction', 'coach_relationship',
@@ -80,26 +69,35 @@ def segment_respondents(input_file, output_file=None, force_k=None):
                 pct = seg_df[col].value_counts().iloc[0] / len(seg_df) * 100
                 print(f"    {col}: mostly '{top}' ({pct:.0f}%)")
 
-    # ── Top 5 most unmet outcomes per segment ────────────────────────
-    print("\n  Top 5 unmet outcomes per segment (by avg opportunity score):")
+    # Top 5 most unmet outcomes per segment (lowest satisfaction on important outcomes)
+    print("\n  Top 5 most unmet outcomes per segment (lowest avg satisfaction):")
+    imp_cols = sorted(
+        [c for c in df.columns if c.endswith('_imp') and c.startswith('Q')],
+        key=lambda x: int(x.split('_')[0][1:])
+    )
     for seg in sorted(df['segment'].unique()):
         seg_df = df[df['segment'] == seg]
-        opp_means = seg_df[opp_cols].mean().sort_values(ascending=False)
+        # Compute opportunity score per outcome for this segment
+        q_nums = sorted(set(int(c.split('_')[0][1:]) for c in sat_cols))
+        opp_scores = {}
+        for i in q_nums:
+            imp = seg_df[f'Q{i}_imp'].mean()
+            sat = seg_df[f'Q{i}_sat'].mean()
+            opp_scores[f'Q{i}'] = round(imp + max(imp - sat, 0), 2)
+        top5 = sorted(opp_scores.items(), key=lambda x: x[1], reverse=True)[:5]
         print(f"\n  Segment {seg}:")
-        for col, val in opp_means.head(5).items():
-            print(f"    {col.replace('_opp','')}: {val:.2f}")
+        for q, val in top5:
+            print(f"    {q}: {val:.2f}")
 
-    # Drop temporary opp columns from output to keep file clean
-    df_out = df.drop(columns=opp_cols)
-
+    # Save
     if output_file is None:
         output_file = input_file.replace('.csv', '_segments.csv')
 
-    df_out.to_csv(output_file, index=False)
+    df.to_csv(output_file, index=False)
     print(f"\nDone! Saved to: {output_file}")
     print(f"Column 'segment' added — values 1 to {best_k}")
 
-    return df_out
+    return df
 
 
 if __name__ == "__main__":
@@ -107,7 +105,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         print("Usage: python segment_respondents.py <input_file.csv> [output_file.csv] [force_k]")
-        print("Example: python segment_respondents.py results_all.csv results_segments.csv 3")
+        print("Example: python segment_respondents.py results_all.csv results_segments.csv")
         sys.exit(1)
 
     input_file = sys.argv[1]
