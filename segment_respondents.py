@@ -11,18 +11,31 @@ def segment_respondents(input_file, output_file=None, force_k=None):
     df = pd.read_csv(input_file)
     print(f"Loaded {len(df)} respondents.")
 
-    imp_cols = sorted(
-        [c for c in df.columns if c.endswith('_imp') and c.startswith('Q')],
-        key=lambda x: int(x.split('_')[0][1:])
-    )
-    print(f"Found {len(imp_cols)} importance columns.")
+    # Detect question numbers
+    q_nums = sorted(set(
+        int(c.split('_')[0][1:])
+        for c in df.columns if c.startswith('Q') and '_' in c
+    ))
+    print(f"Found {len(q_nums)} outcomes (Q{q_nums[0]} to Q{q_nums[-1]}).")
 
-    X = df[imp_cols].fillna(df[imp_cols].mean())
+    # ── Compute per-respondent opportunity score for each outcome ────
+    # Ulwick: Opportunity = Importance + max(Importance - Satisfaction, 0)
+    opp_cols = []
+    for i in q_nums:
+        imp = df[f'Q{i}_imp']
+        sat = df[f'Q{i}_sat']
+        col = f'Q{i}_opp'
+        df[col] = imp + (imp - sat).clip(lower=0)
+        opp_cols.append(col)
+
+    print(f"Computed {len(opp_cols)} per-respondent opportunity scores.")
+
+    # ── Cluster on opportunity scores ────────────────────────────────
+    X = df[opp_cols].fillna(df[opp_cols].mean())
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Find best k or use forced k
-    print("\nTesting k=2 to 8...")
+    print("\nFinding optimal number of segments (k=2 to 8)...")
     print(f"{'k':>4} {'silhouette':>12} {'inertia':>12}")
     print("-" * 32)
 
@@ -41,7 +54,7 @@ def segment_respondents(input_file, output_file=None, force_k=None):
             best_k = k
 
     if force_k:
-        print(f"\nMath suggests k={best_k}, but forcing k={force_k} (ODI domain decision)")
+        print(f"\nMath suggests k={best_k}, forcing k={force_k} (domain decision)")
         best_k = force_k
     else:
         print(f"\nBest k = {best_k} (silhouette = {best_score:.4f})")
@@ -50,7 +63,7 @@ def segment_respondents(input_file, output_file=None, force_k=None):
     km_final = KMeans(n_clusters=best_k, random_state=42, n_init=10)
     df['segment'] = km_final.fit_predict(X_scaled) + 1
 
-    # Profile each segment
+    # ── Profile each segment ─────────────────────────────────────────
     print("\nSegment profiles:")
     meta_cols = [c for c in ['age', 'skill_level', 'position', 'stress_level',
                               'overall_satisfaction', 'coach_relationship',
@@ -67,25 +80,26 @@ def segment_respondents(input_file, output_file=None, force_k=None):
                 pct = seg_df[col].value_counts().iloc[0] / len(seg_df) * 100
                 print(f"    {col}: mostly '{top}' ({pct:.0f}%)")
 
-    # Top 5 most important outcomes per segment
-    print("\n  Top 5 outcomes by importance per segment:")
+    # ── Top 5 most unmet outcomes per segment ────────────────────────
+    print("\n  Top 5 unmet outcomes per segment (by avg opportunity score):")
     for seg in sorted(df['segment'].unique()):
         seg_df = df[df['segment'] == seg]
-        imp_means = seg_df[imp_cols].mean().sort_values(ascending=False)
-        top5 = imp_means.head(5)
+        opp_means = seg_df[opp_cols].mean().sort_values(ascending=False)
         print(f"\n  Segment {seg}:")
-        for q, val in top5.items():
-            print(f"    {q.replace('_imp','')}: {val:.2f}")
+        for col, val in opp_means.head(5).items():
+            print(f"    {col.replace('_opp','')}: {val:.2f}")
 
-    # Save
+    # Drop temporary opp columns from output to keep file clean
+    df_out = df.drop(columns=opp_cols)
+
     if output_file is None:
         output_file = input_file.replace('.csv', '_segments.csv')
 
-    df.to_csv(output_file, index=False)
+    df_out.to_csv(output_file, index=False)
     print(f"\nDone! Saved to: {output_file}")
     print(f"Column 'segment' added — values 1 to {best_k}")
 
-    return df
+    return df_out
 
 
 if __name__ == "__main__":
