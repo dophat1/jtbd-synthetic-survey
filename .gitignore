@@ -245,5 +245,6 @@ Thumbs.db
 merge_batches.py
 
 *.png
+!jtbd.png
 
 *.csv
