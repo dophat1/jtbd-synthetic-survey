@@ -1,7 +1,7 @@
 # Quantitative synthetic survey automated with JTBD theory
 
 ## Overview
-![alt text](image.png)
+![alt text](jtbd.png)
 The purpose of this project is: use LLMs (ChatGPT) to answer synthetic surveys for football clubs with given personas according to Jobs-to-be-done method and pre-given ODI statements. 
 
 ## Setup
